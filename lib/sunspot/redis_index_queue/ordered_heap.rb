@@ -20,8 +20,8 @@ module Sunspot
       def range!(score_begin, score_end, limit = NO_LIMIT)
         redis.synchronize do
           result = redis.zrangebyscore(name, score_begin.to_i, score_end.to_i, :limit => [0, limit])
-          if result.count > 0
-            redis.zrem(name, result)
+          result.each do |item|
+            redis.zrem(name, item)
           end
           result.map {|item| unserialize(item) }
         end
