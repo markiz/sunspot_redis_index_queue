@@ -122,9 +122,10 @@ module Sunspot
         entries.each(&method(:process_entry)).count
       end
 
-      # Reset bunny connection
+      # Reset redis connection
       # @api semipublic
       def reset
+        @redis = Redis.connect(options)
       end
 
       # Index or remove an entry
