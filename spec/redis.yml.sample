@@ -1,0 +1,5 @@
+host: localhost
+port: 6379
+db: 15
+password: NULL
+sunspot_index_queue_name: 'sunspot-redis-index'

@@ -1,6 +1,0 @@
-host: localhost
-port: 5672
-vhost: "/"
-user: guest
-pass: guest
-sunspot_index_queue_name: sunspot_amqp_index_queue_test

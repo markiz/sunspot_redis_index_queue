@@ -1,16 +1,16 @@
-# AMQP Index Queue for sunspot
+# Redis Index Queue for sunspot
 
 Asynchronously index your sunspot models.
 
 ## Rationale and influences
 
-This library is heavily influenced by [https://github.com/bdurand/sunspot_index_queue](sunspot_index_queue) gem. My motivation to write a separate library instead of an adapter was mainly to remove features that were difficult to implement in an AMQP queue terms (keeping failed jobs and error messages, priorities). However, one "weird" feature, namely, retrying jobs after a certain period on failure, made its way through.
+This library is heavily influenced by [https://github.com/bdurand/sunspot_index_queue](sunspot_index_queue) gem.
 
 ## Installation
 
 Add this line to your application's Gemfile:
 
-    gem 'sunspot_amqp_index_queue'
+    gem 'sunspot_redis_index_queue'
 
 And then execute:
 
@@ -18,7 +18,7 @@ And then execute:
 
 Or install it yourself as:
 
-    $ gem install sunspot_amqp_index_queue
+    $ gem install sunspot_redis_index_queue
 
 ## Usage
 
@@ -27,18 +27,15 @@ all index/remove requests to a queue:
 
 
     # Somewhere in an initializer (for Rails) / before your code starts
-    require 'sunspot_amqp_index_queue'
-    amqp_config = {
+    require 'sunspot_redis_index_queue'
+    redis_config = {
       "host"       => "localhost",
-      "port"       => 5672,
-      "user"       => "guest",
-      "pass"       => "guest",
-      "vhost"      => "/",
+      "port"       => 6379,
       "queue_name" => "indexer_queue"
     }
     # Implies that Sunspot.session is already initialized as your real sunspot
     # session
-    Sunspot.session = Sunspot::AmqpIndexQueue::SessionProxy.new(Sunspot.session, amqp_config)
+    Sunspot.session = Sunspot::RedisIndexQueue::SessionProxy.new(Sunspot.session, redis_config)
 
 
 Second part is an indexing daemon that handles processing. It boils down to
@@ -53,10 +50,7 @@ Second part is an indexing daemon that handles processing. It boils down to
 
 ## Thread-safety
 
-It is safe to use a threaded solution for an indexer, separate connection to
-AMQP broker will be made per-thread. It is also safe to instantiate more than
-one Sunspot::AmqpIndexQueue::SessionProxy or Sunspot::AmqpIndexQueue::Client
-in one thread.
+It should be safe to use a threaded solution for an indexer.
 
 
 ## Contributing

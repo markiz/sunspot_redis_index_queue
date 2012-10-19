@@ -6,8 +6,8 @@ require 'sunspot'
 require 'sunspot/session_proxy/abstract_session_proxy'
 
 module Sunspot
-  module AmqpIndexQueue
-    # This is a Sunspot::SessionProxy that works with {Sunspot::AmqpIndexQueue::Client}
+  module RedisIndexQueue
+    # This is a Sunspot::SessionProxy that works with {Sunspot::RedisIndexQueue::Client}
     # class.
     #
     # Most update requests will be added to the queue and processed
@@ -25,16 +25,14 @@ module Sunspot
       #
       # @param [Sunspot::SessionProxy] session previously instantiated sunspot
       #    session or session proxy.
-      # @option client_opts [String] "host" ("localhost") AMQP host name
-      # @option client_opts [Integer] "port" (55672) AMQP port
-      # @option client_opts [String] "user" ("guest") AMQP user name
-      # @option client_opts [String] "pass" ("guest") AMQP password
-      # @option client_opts [String] "vhost" ("/") AMQP vhost
+      # @option client_opts [String] "host" ("localhost") redis host name
+      # @option client_opts [Integer] "port" (6379) redis port
+      # @option client_opts [String] "password" (nil) redis password
       # @option client_opts [String] "sunspot_index_queue_name" ("sunspot_index_queue")
+      #    redis index queue name
       # @option client_opts [Integer] "retry_interval" (300) time before next
       #    indexing attempt in case of failure / exception
       # @option client_opts [Integer] "max_attempts_count" (5) attempts count
-      #    AMQP index queue name
       # @option client_opts [Integer] "index_delay" (0) delay in seconds between receiving
       #    a message about indexing and trying to process it
       # @api public

@@ -1,7 +1,7 @@
 require "spec_helper"
 # TODO: instead of mocking out Sunspot session, start the real search
 #       server.
-describe Sunspot::AmqpIndexQueue, "indexing models" do
+describe Sunspot::RedisIndexQueue, "indexing models" do
   class TestModel
     attr_accessor :id
     def initialize(id)
@@ -22,20 +22,22 @@ describe Sunspot::AmqpIndexQueue, "indexing models" do
     end
   end
 
-  before(:each) { TestModel.reset_models_map }
+  let(:redis) { Redis.connect($redis_config) }
+  before(:each) do
+    Sunspot.session.client.purge
+    TestModel.reset_models_map
+  end
+
 
   it "adds items to queue and can process them from queue later" do
     model = TestModel.new(1)
     $session.should_receive(:index).with(model)
 
     Sunspot.index(model)
-
-    $queue.status[:message_count].should == 1
-
+    Sunspot.session.client.count.should == 1
     processed_count = Sunspot.session.client.process
     processed_count.should == 1
-
-    $queue.status[:message_count].should == 0
+    Sunspot.session.client.count.should == 0
   end
 
   it "removes entries when required" do
@@ -44,12 +46,12 @@ describe Sunspot::AmqpIndexQueue, "indexing models" do
 
     Sunspot.remove(model)
 
-    $queue.status[:message_count].should == 1
+    Sunspot.session.client.count.should == 1
 
     processed_count = Sunspot.session.client.process
     processed_count.should == 1
 
-    $queue.status[:message_count].should == 0
+    Sunspot.session.client.count.should == 0
   end
 
   it "readds items to queue when exceptions are raised" do
@@ -60,8 +62,9 @@ describe Sunspot::AmqpIndexQueue, "indexing models" do
     processed_count = Sunspot.session.client.process
     processed_count.should == 1
 
-    $queue.status[:message_count].should == 1
-    entry = Sunspot.session.client.pop
+    Sunspot.session.client.count.should == 1
+
+    entry = Sunspot.session.client.get(Time.now, Time.now + Sunspot.session.client.retry_interval).first
     entry.attempts_count.should == 1
     entry.run_at.should > Time.now
   end
