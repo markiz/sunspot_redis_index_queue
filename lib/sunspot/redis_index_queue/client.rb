@@ -119,7 +119,11 @@ module Sunspot
       # @api public
       def process(limit = 10)
         entries = get(Time.at(0), Time.now, limit)
-        entries.each(&method(:process_entry)).count
+        to_remove = entries.select(&:to_remove)
+        to_index  = entries.reject(&:to_remove)
+        _remove(to_remove) unless to_remove.empty?
+        _index(to_index) unless to_index.empty?
+        entries.count
       end
 
       # Reset redis connection
@@ -128,23 +132,34 @@ module Sunspot
         @redis = Redis.connect(options)
       end
 
-      # Index or remove an entry
-      # @api semipublic
-      def process_entry(entry)
-        if entry.attempts_count < max_attempts_count
-          if entry.to_remove
-            session.remove_by_id(entry.object_class_name, entry.object_id)
-          else
-            session.index(entry.object)
-          end
-        end
+      # Index whole batch on the real session
+      # @api private
+      def _index(entries)
+        session.index(*entries.map(&:object))
       rescue => e
         if defined?(::Rails)
           ::Rails.logger.error "Exception raised while indexing: #{e.class}: #{e}"
         end
-        entry.run_at = Time.now + retry_interval
-        entry.attempts_count += 1
-        add(entry)
+        requeue(entries)
+      end
+
+      # Remove whole batch from the real session
+      # @api private
+      def _remove(entries)
+        session.remove(*entries.map(&:object))
+      rescue => e
+        if defined?(::Rails)
+          ::Rails.logger.error "Exception raised while removing from index: #{e.class}: #{e}"
+        end
+        requeue(entries)
+      end
+
+      def requeue(entries)
+        [entries].flatten.each do |e|
+          e.run_at = Time.now + retry_interval
+          e.attempts_count += 1
+          add(e) unless e.attempts_count >= max_attempts_count
+        end
       end
 
       # @api private

@@ -59,41 +59,6 @@ describe Sunspot::RedisIndexQueue::Client do
     end
   end
 
-  describe "#process_entry" do
-    context "when indexed" do
-      let(:person) { TestPerson.new(9, "mark", "abramov") }
-      let(:entry) { subject.new_entry_for_object(person) }
-
-      it "delegates indexing to wrapped session" do
-        TestPerson.stub(:find).with(person.id).and_return(person)
-        $session.should_receive(:index).with(person)
-        subject.process_entry(entry)
-      end
-    end
-
-
-    context "when removed" do
-      let(:person) { TestPerson.new(9, "mark", "abramov") }
-      let(:entry) { subject.new_entry_for_object(person, :to_remove => true) }
-
-      it "delegates removing to wrapped session" do
-        $session.should_receive(:remove_by_id).with(person.class.name, person.id)
-        subject.process_entry(entry)
-      end
-    end
-
-    context "when failed" do
-      let(:person) { TestPerson.new(9, "mark", "abramov") }
-      let(:entry) { subject.new_entry_for_object(person) }
-
-      it "reenqueues the entry" do
-        $session.stub!(:index) { raise Timeout::Error, "timed out" }
-        subject.process_entry(entry)
-        subject.get(Time.now, Time.now + subject.retry_interval).should_not be_blank
-      end
-    end
-  end
-
   describe "#get" do
     it "wraps around heap.range" do
       subject.index(TestPerson.new(999, "mark", "abramov"))
@@ -117,18 +82,78 @@ describe Sunspot::RedisIndexQueue::Client do
   end
 
   describe "#process" do
-    it "extracts items from the queue and calls #process_entry on them" do
-      entry = stub(:entry)
+    it "selects entries to index and calls _index with them" do
+      entry = stub(:entry, :to_remove => false)
       subject.stub(:get).and_return([entry])
-      subject.should_receive(:process_entry).with(entry)
+      subject.should_receive(:_index).with([entry])
+      subject.should_not_receive(:_remove)
+      subject.process
+    end
+
+    it "selects entries to remove and calls _remove with them" do
+      entry = stub(:entry, :to_remove => true)
+      subject.stub(:get).and_return([entry])
+      subject.should_receive(:_remove).with([entry])
+      subject.should_not_receive(:_index)
       subject.process
     end
 
     it "returns a number of items processed" do
-      entry = stub(:entry)
+      entry = stub(:entry, :to_remove => false)
       subject.stub(:get).and_return([entry])
       subject.stub(:process_entry).with(entry)
+      subject.stub(:_index)
       subject.process.should == 1
+    end
+  end
+
+  describe "#_index" do
+    it "delegates to session" do
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
+      indexed_object = stub
+      entry.stub(:object) { indexed_object }
+      $session.should_receive(:index).with(indexed_object)
+      subject._index([entry])
+    end
+
+    it "requeues on exceptions" do
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
+      $session.stub(:index) { raise Timeout::TimeoutError }
+      subject.should_receive(:requeue).with([entry])
+      subject._index([entry])
+    end
+  end
+
+  describe "#_remove" do
+    it "delegates to session" do
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
+      indexed_object = stub
+      entry.stub(:object) { indexed_object }
+      $session.should_receive(:remove).with(indexed_object)
+      subject._remove([entry])
+    end
+
+    it "requeues on exceptions" do
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
+      $session.stub(:remove) { raise Timeout::TimeoutError }
+      subject.should_receive(:requeue).with([entry])
+      subject._remove([entry])
+    end
+  end
+  describe "#requeue" do
+    it "updates requeued entry run_at and attempts_count" do
+      subject.should_receive(:add) do |entry|
+        entry.attempts_count.should == 1
+        entry.run_at.should >= Time.now
+      end
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
+      subject.requeue(entry)
+    end
+
+    it "doesn't add entry to queue if its attempts are exceeded" do
+      subject.should_not_receive(:add)
+      entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => subject.max_attempts_count)
+      subject.requeue(entry)
     end
   end
 end
