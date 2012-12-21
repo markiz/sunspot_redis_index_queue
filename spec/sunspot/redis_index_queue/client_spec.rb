@@ -1,5 +1,5 @@
 require "spec_helper"
-
+require "timeout"
 describe Sunspot::RedisIndexQueue::Client do
   TestPerson = Struct.new(:id, :first_name, :last_name)
 
@@ -118,9 +118,11 @@ describe Sunspot::RedisIndexQueue::Client do
 
     it "requeues on exceptions" do
       entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
-      $session.stub(:index) { raise Timeout::TimeoutError }
+      indexed_object = stub
+      entry.stub(:object) { indexed_object }
+      $session.stub(:index) { raise Timeout::Error }
       subject.should_receive(:requeue).with([entry])
-      subject._index([entry])
+      expect { subject._index([entry]) }.to raise_error(Timeout::Error)
     end
   end
 
@@ -135,11 +137,14 @@ describe Sunspot::RedisIndexQueue::Client do
 
     it "requeues on exceptions" do
       entry = Sunspot::RedisIndexQueue::Client::Entry.new(:attempts_count => 0, :run_at => 3.days.ago)
-      $session.stub(:remove) { raise Timeout::TimeoutError }
+      indexed_object = stub
+      entry.stub(:object) { indexed_object }
+      $session.stub(:remove) { raise Timeout::Error }
       subject.should_receive(:requeue).with([entry])
-      subject._remove([entry])
+      expect { subject._remove([entry]) }.to raise_error(Timeout::Error)
     end
   end
+
   describe "#requeue" do
     it "updates requeued entry run_at and attempts_count" do
       subject.should_receive(:add) do |entry|

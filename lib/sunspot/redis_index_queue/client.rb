@@ -141,6 +141,7 @@ module Sunspot
           ::Rails.logger.error "Exception raised while indexing: #{e.class}: #{e}"
         end
         requeue(entries)
+        raise
       end
 
       # Remove whole batch from the real session
@@ -152,6 +153,7 @@ module Sunspot
           ::Rails.logger.error "Exception raised while removing from index: #{e.class}: #{e}"
         end
         requeue(entries)
+        raise
       end
 
       def requeue(entries)
